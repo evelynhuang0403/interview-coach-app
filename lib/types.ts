@@ -84,6 +84,12 @@ export type StoryFollowUp = {
   answer: string;
 };
 
+export type StoryInterviewQuestion = {
+  question: string;
+  lead?: string;
+  emphasize?: string;
+};
+
 export type StructuredContent = {
   kind: "concept" | "story" | "plain";
   metadata?: Record<string, string>;
@@ -106,7 +112,8 @@ export type StructuredContent = {
   }>;
   addOns?: StructuredSection[];
   followUps?: StoryFollowUp[];
-  interviewQuestions?: string[];
+  challengeQuestions?: StoryFollowUp[];
+  interviewQuestions?: Array<string | StoryInterviewQuestion>;
   deliveryTips?: string[];
   decisions?: string[];
   sourceMarkdown?: string;

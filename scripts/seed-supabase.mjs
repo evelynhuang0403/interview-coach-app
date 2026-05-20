@@ -176,15 +176,47 @@ function parseFollowUps(sections) {
     }));
 }
 
+function parseLeadEmphasize(body) {
+  const lead = body.match(/\*\*Lead:\*\*\s*([\s\S]*?)(?=\n\*\*Emphasize:\*\*|$)/i)?.[1]?.trim() ?? "";
+  const emphasize = body.match(/\*\*Emphasize:\*\*\s*([\s\S]*?)$/i)?.[1]?.trim() ?? "";
+  return {
+    lead: cleanInline(lead),
+    emphasize: cleanInline(emphasize)
+  };
+}
+
 function parseInterviewQuestions(sections) {
   const startIndex = sections.findIndex((section) => /^Interview Questions This Story Answers/i.test(section.title));
   if (startIndex === -1) return [];
   const questions = [];
   for (const section of sections.slice(startIndex + 1)) {
     if (section.level === 2) break;
-    if (/^\d+\./.test(section.title)) questions.push(cleanInline(section.title.replace(/^\d+\.\s*/, "")));
+    if (/^\d+\./.test(section.title)) {
+      const { lead, emphasize } = parseLeadEmphasize(section.body);
+      questions.push({
+        question: cleanInline(section.title.replace(/^\d+\.\s*/, "")),
+        lead,
+        emphasize
+      });
+    }
   }
   return questions;
+}
+
+function parseChallengeQuestions(sections) {
+  const startIndex = sections.findIndex((section) => /^If the Interviewer Challenges This Resume Bullet/i.test(section.title));
+  if (startIndex === -1) return [];
+  const challenges = [];
+  for (const section of sections.slice(startIndex + 1)) {
+    if (section.level === 2) break;
+    if (/^Challenge\s+\d+:/i.test(section.title)) {
+      challenges.push({
+        question: cleanInline(section.title.replace(/^Challenge\s+\d+:\s*/i, "")),
+        answer: parseQuote(section.body) || cleanInline(section.body)
+      });
+    }
+  }
+  return challenges;
 }
 
 function parseStoryStructuredContent(markdown, id, title) {
@@ -229,6 +261,7 @@ function parseStoryStructuredContent(markdown, id, title) {
     spokenVersions,
     addOns,
     followUps: parseFollowUps(sections),
+    challengeQuestions: parseChallengeQuestions(sections),
     interviewQuestions: parseInterviewQuestions(sections),
     deliveryTips: deliverySection ? parseBullets(deliverySection.body) : [],
     decisions: decisionSection ? parseBullets(decisionSection.body) : [],

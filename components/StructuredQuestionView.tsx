@@ -261,11 +261,44 @@ function StoryQuestionView({ question, content }: { question: Question; content:
             <h2>Question Mapping</h2>
           </div>
           <div className="panel-body">
-            <div className="mapping-list">
-              {content.interviewQuestions.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
+            <div className="qa-grid">
+              {content.interviewQuestions.map((item) => {
+                const mapped = typeof item === "string" ? { question: item } : item;
+                return (
+                  <article className="qa-card" key={mapped.question}>
+                    <h3>{mapped.question}</h3>
+                    {mapped.lead ? (
+                      <p>
+                        <strong>Lead:</strong> {mapped.lead}
+                      </p>
+                    ) : null}
+                    {mapped.emphasize ? (
+                      <p>
+                        <strong>Emphasize:</strong> {mapped.emphasize}
+                      </p>
+                    ) : null}
+                  </article>
+                );
+              })}
             </div>
+          </div>
+        </section>
+      ) : null}
+
+      {content.challengeQuestions?.length ? (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Resume Bullet Challenges</h2>
+          </div>
+          <div className="panel-body qa-grid">
+            {content.challengeQuestions.map((item) => (
+              <article className="qa-card" key={item.question}>
+                <h3>{item.question}</h3>
+                <MaskedBlock title="answer">
+                  <MarkdownText text={item.answer} />
+                </MaskedBlock>
+              </article>
+            ))}
           </div>
         </section>
       ) : null}
