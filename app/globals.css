@@ -811,6 +811,29 @@ em { font-style: italic; }
   color: var(--ink-soft);
   padding: var(--s-5);
 }
+.keyword-track {
+  background: rgba(255, 250, 238, .9);
+  border: 1px dashed var(--paper-3);
+  border-radius: var(--r-paper);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.65;
+  padding: var(--s-4);
+  text-align: left;
+}
+.keyword-track-label {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  margin-bottom: var(--s-2);
+  text-transform: uppercase;
+}
+.keyword-track ul {
+  margin: 0;
+  padding-left: 20px;
+}
 
 .table-wrap { overflow-x: auto; }
 .data-table { width: 100%; border-collapse: collapse; font-family: var(--font-serif); font-size: 15px; }
@@ -846,6 +869,37 @@ em { font-style: italic; }
 .disclosure, .source-toggle { border: 1px dashed var(--paper-3); border-radius: var(--r-paper); padding: var(--s-3); background: var(--paper-soft); }
 .disclosure summary, .source-toggle summary { cursor: pointer; font-family: var(--font-serif); font-weight: 600; }
 .disclosure-body, .disclosure-list { display: grid; gap: var(--s-3); margin-top: var(--s-3); min-width: 0; }
+.opg-disclosure summary {
+  align-items: center;
+  display: flex;
+  gap: var(--s-3);
+  justify-content: space-between;
+}
+.opg-disclosure summary span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.opg-summary-actions {
+  align-items: center;
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: var(--s-2);
+}
+.opg-edit-form {
+  display: grid;
+  gap: var(--s-3);
+}
+.opg-edit-form label {
+  display: grid;
+  gap: var(--s-2);
+}
+.opg-edit-form label > span {
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
 .source-toggle pre { white-space: pre-wrap; overflow-x: auto; font-family: var(--font-mono); font-size: 12px; }
 .mapping-list, .meta { display: flex; flex-wrap: wrap; gap: var(--s-2); color: var(--ink-soft); }
 .mapping-list span, .pill { display: inline-flex; align-items: center; gap: var(--s-1); padding: 3px 8px; border-radius: var(--r-pill); background: var(--paper-soft); border: 1px solid var(--paper-3); font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-soft); max-width: 100%; overflow-wrap: anywhere; }

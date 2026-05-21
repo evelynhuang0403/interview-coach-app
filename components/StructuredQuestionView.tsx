@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { MarkdownTable, Question, StructuredContent, StructuredSection } from "@/lib/types";
+import { saveQuestion } from "@/lib/data";
+import type { MarkdownTable, OpgQuestionBankItem, Question, QuestionInput, StructuredContent, StructuredSection } from "@/lib/types";
 import { statusLabel } from "@/lib/format";
 
 function cleanMarkup(text: string) {
@@ -64,8 +65,18 @@ function DataTable({ table }: { table: MarkdownTable }) {
   );
 }
 
-function MaskedBlock({ title = "answer", children }: { title?: string; children: React.ReactNode }) {
-  const [visible, setVisible] = useState(true);
+function MaskedBlock({
+  title = "answer",
+  initialVisible = true,
+  hiddenContent,
+  children
+}: {
+  title?: string;
+  initialVisible?: boolean;
+  hiddenContent?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const [visible, setVisible] = useState(initialVisible);
   return (
     <div className={visible ? "masked-block" : "masked-block masked"}>
       <div className="mask-toolbar">
@@ -74,7 +85,7 @@ function MaskedBlock({ title = "answer", children }: { title?: string; children:
           {visible ? `Hide ${title}` : `Show ${title}`}
         </button>
       </div>
-      {visible ? <div>{children}</div> : <div className="masked-placeholder">Answer is hidden for active recall.</div>}
+      {visible ? <div>{children}</div> : hiddenContent ?? <div className="masked-placeholder">Answer is hidden for active recall.</div>}
     </div>
   );
 }
@@ -372,6 +383,220 @@ function StoryQuestionView({ question, content }: { question: Question; content:
   );
 }
 
+function KeywordTrack({ items }: { items?: string[] }) {
+  if (!items?.length) return <div className="masked-placeholder">Answer is hidden for active recall.</div>;
+  return (
+    <div className="keyword-track">
+      <div className="keyword-track-label">Keyword track</div>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function sourceFromOpgItem(item: OpgQuestionBankItem) {
+  if (item.type !== "question") return item.body ?? "";
+  const keywordTrack = item.keywordTrack?.length
+    ? `\n\n**Keyword track:**\n${item.keywordTrack.map((line) => `- ${line}`).join("\n")}`
+    : "";
+  return `${item.answer ?? ""}${keywordTrack}`.trim();
+}
+
+function questionToInput(question: Question): QuestionInput {
+  return {
+    source_id: question.source_id ?? null,
+    title: question.title,
+    prompt: question.prompt,
+    answer: question.answer,
+    category: question.category,
+    track: question.track,
+    difficulty: question.difficulty,
+    tags: question.tags ?? [],
+    source_file: question.source_file ?? null,
+    story_links: question.story_links ?? [],
+    status: question.status,
+    notes: question.notes ?? "",
+    structured_content: question.structured_content ?? null,
+    question_group: question.question_group ?? null,
+    behavioral_type: question.behavioral_type ?? null,
+    technical_type: question.technical_type ?? null,
+    review_count: question.review_count,
+    last_reviewed_at: question.last_reviewed_at ?? null
+  };
+}
+
+function OpgQuestionEditor({
+  item,
+  onCancel,
+  onSave
+}: {
+  item: OpgQuestionBankItem;
+  onCancel: () => void;
+  onSave: (item: OpgQuestionBankItem) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(item.title);
+  const [answer, setAnswer] = useState(item.answer ?? "");
+  const [keywordTrack, setKeywordTrack] = useState((item.keywordTrack ?? []).join("\n"));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    setSaving(true);
+    setError("");
+    const nextItem: OpgQuestionBankItem = {
+      ...item,
+      title: title.trim() || item.title,
+      answer: answer.trim(),
+      keywordTrack: keywordTrack
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^\s*-\s+/, "").trim())
+        .filter(Boolean)
+    };
+    nextItem.sourceMarkdown = sourceFromOpgItem(nextItem);
+    try {
+      await onSave(nextItem);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Could not save this question.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="opg-edit-form">
+      <label>
+        <span>Question</span>
+        <input className="input" value={title} onChange={(event) => setTitle(event.target.value)} />
+      </label>
+      <label>
+        <span>Answer</span>
+        <textarea className="textarea" rows={8} value={answer} onChange={(event) => setAnswer(event.target.value)} />
+      </label>
+      <label>
+        <span>Keyword track</span>
+        <textarea className="textarea" rows={6} value={keywordTrack} onChange={(event) => setKeywordTrack(event.target.value)} />
+      </label>
+      {error ? <div className="notice">{error}</div> : null}
+      <div className="row-3">
+        <button className="button primary" onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save question"}
+        </button>
+        <button className="button" onClick={onCancel} disabled={saving}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OpgQuestionView({ question, content }: { question: Question; content: StructuredContent }) {
+  const [opgSections, setOpgSections] = useState(content.opgSections ?? []);
+  const [editingKey, setEditingKey] = useState("");
+
+  async function saveOpgItem(sectionIndex: number, itemIndex: number, nextItem: OpgQuestionBankItem) {
+    const nextSections = opgSections.map((section, currentSectionIndex) => {
+      if (currentSectionIndex !== sectionIndex) return section;
+      return {
+        ...section,
+        items: section.items.map((item, currentItemIndex) => (currentItemIndex === itemIndex ? nextItem : item))
+      };
+    });
+    const nextContent: StructuredContent = {
+      ...content,
+      opgSections: nextSections
+    };
+    const nextQuestion = {
+      ...questionToInput(question),
+      structured_content: nextContent
+    };
+    await saveQuestion(nextQuestion, question.id);
+    setOpgSections(nextSections);
+    setEditingKey("");
+  }
+
+  return (
+    <div className="structured-grid">
+      <section className="panel hero-panel">
+        <div className="panel-header">
+          <h2>OPG Prep Binder</h2>
+          <span className={`pill ${question.status}`}>{statusLabel(question.status)}</span>
+        </div>
+        <div className="panel-body">
+          <p className="review-prompt">{question.prompt}</p>
+          <div className="meta" style={{ marginTop: 12 }}>
+            <span className="pill">{opgSections.reduce((count, section) => count + section.items.length, 0)} items</span>
+            <span className="pill">{opgSections.length} sections</span>
+          </div>
+        </div>
+      </section>
+
+      {opgSections.map((section, sectionIndex) => (
+        <section className="panel full-span" key={section.title}>
+          <div className="panel-header">
+            <h2>{section.title}</h2>
+            <span className="pill">{section.items.length}</span>
+          </div>
+          <div className="panel-body disclosure-list">
+            {section.items.map((item, itemIndex) => {
+              const itemKey = `${section.title}-${item.type}-${item.number ?? item.title}`;
+              const isEditing = editingKey === itemKey;
+              return (
+              <details className="disclosure opg-disclosure" key={itemKey}>
+                <summary>
+                  <span>{item.type === "question" && item.number ? `#${item.number}. ` : ""}{item.title}</span>
+                  <span className="opg-summary-actions">
+                    {item.type === "question" ? (
+                      <button
+                        className="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setEditingKey(itemKey);
+                        }}
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                    <span className="pill">{item.type === "question" ? "answer" : "notes"}</span>
+                  </span>
+                </summary>
+                <div className="disclosure-body">
+                  {isEditing ? (
+                    <OpgQuestionEditor
+                      item={item}
+                      onCancel={() => setEditingKey("")}
+                      onSave={(nextItem) => saveOpgItem(sectionIndex, itemIndex, nextItem)}
+                    />
+                  ) : item.type === "question" ? (
+                    <MaskedBlock title="answer" initialVisible={false} hiddenContent={<KeywordTrack items={item.keywordTrack} />}>
+                      <MarkdownText text={item.answer ?? ""} />
+                    </MaskedBlock>
+                  ) : (
+                    <MarkdownText text={item.body ?? ""} />
+                  )}
+                </div>
+              </details>
+            );
+            })}
+          </div>
+        </section>
+      ))}
+
+      <section className="panel full-span">
+        <div className="panel-header">
+          <h2>Source</h2>
+        </div>
+        <div className="panel-body">
+          <SourceToggle source={content.sourceMarkdown || question.answer} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function PlainQuestionView({ question }: { question: Question }) {
   return (
     <div className="content-grid">
@@ -423,6 +648,10 @@ export function StructuredQuestionView({ question }: { question: Question }) {
 
   if (content?.kind === "story") {
     return <StoryQuestionView question={question} content={content} />;
+  }
+
+  if (content?.kind === "opg") {
+    return <OpgQuestionView question={question} content={content} />;
   }
 
   return <PlainQuestionView question={question} />;

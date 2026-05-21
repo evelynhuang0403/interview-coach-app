@@ -90,10 +90,28 @@ export type StoryInterviewQuestion = {
   emphasize?: string;
 };
 
+export type OpgQuestionBankItem = {
+  type: "question" | "resource";
+  number?: number;
+  title: string;
+  answer?: string;
+  keywordTrack?: string[];
+  body?: string;
+  sourceMarkdown?: string;
+};
+
+export type OpgQuestionBankSection = {
+  title: string;
+  items: OpgQuestionBankItem[];
+};
+
 export type StructuredContent = {
-  kind: "concept" | "story" | "plain";
+  kind: "concept" | "story" | "opg" | "plain";
   metadata?: Record<string, string>;
   sections?: StructuredSection[];
+  opgSections?: OpgQuestionBankSection[];
+  answer?: string;
+  keywordTrack?: string[];
   shortAnswer?: string;
   bestPractices?: string[];
   interviewTip?: string;

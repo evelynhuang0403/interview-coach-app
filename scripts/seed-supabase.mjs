@@ -9,6 +9,7 @@ const { loadEnvConfig } = nextEnv;
 loadEnvConfig(root);
 
 const bankPath = path.join(root, "sources", "conceptual_question_bank.md");
+const opgBankPath = path.join(root, "sources", "PREP_OPG_INTERVIEW_QUESTION_BANK.md");
 const storiesDir = path.join(root, "sources", "stories");
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -346,6 +347,219 @@ function parseConceptualBank(markdown) {
     .filter((question) => question.answer && !question.answer.includes("Entries added as they come up"));
 }
 
+function splitOpgQuestionBody(body) {
+  const [answerPart, keywordPart = ""] = body.split(/\n\*\*Keyword track:\*\*[^\n]*\n/i);
+  const keywordTrack = keywordPart
+    .split(/\r?\n/)
+    .filter((line) => line.trim().startsWith("- "))
+    .map((line) => cleanInline(line.replace(/^\s*-\s+/, "")));
+
+  return {
+    answer: answerPart.trim(),
+    keywordTrack
+  };
+}
+
+function makeArchivedOpgSeed(sourceId, title = sourceId) {
+  return {
+    user_id: userId,
+    source_id: sourceId,
+    title,
+    prompt: title,
+    answer: "Archived legacy OPG seed record. Use OPG-QUESTION-BANK instead.",
+    category: "OPG Interview Prep",
+    track: "OPG Interview",
+    difficulty: "easy",
+    tags: ["opg", "archived"],
+    source_file: "sources/PREP_OPG_INTERVIEW_QUESTION_BANK.md",
+    story_links: [],
+    status: "archived",
+    notes: "Archived by seed script after OPG bank moved to one aggregate page.",
+    structured_content: null,
+    question_group: "behavioral",
+    behavioral_type: "phone_interview",
+    technical_type: null
+  };
+}
+
+function parseOpgQuestionBank(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const sections = [];
+  const introLines = [];
+  let sectionTitle = "Overview";
+  let current = null;
+  let resource = null;
+  let beforeFirstSection = true;
+
+  function getSection(title) {
+    let section = sections.find((item) => item.title === title);
+    if (!section) {
+      section = { title, items: [] };
+      sections.push(section);
+    }
+    return section;
+  }
+
+  function pushCurrent() {
+    if (!current) return;
+    const body = trimBlankLines(current.body).join("\n").trim();
+    const { answer, keywordTrack } = splitOpgQuestionBody(body);
+    if (answer) {
+      getSection(current.sectionTitle).items.push({
+        type: "question",
+        number: current.number,
+        title: current.title,
+        answer,
+        keywordTrack,
+        sourceMarkdown: body
+      });
+    }
+    current = null;
+  }
+
+  function pushResource() {
+    if (!resource) return;
+    const body = trimBlankLines(resource.body).join("\n").trim();
+    if (body) {
+      getSection(resource.sectionTitle).items.push({
+        type: "resource",
+        title: resource.title,
+        body,
+        keywordTrack: parseBullets(body),
+        sourceMarkdown: body
+      });
+    }
+    resource = null;
+  }
+
+  for (const line of lines) {
+    const numberedQuestion = line.match(/^##\s+#(\d+)\.\s+(.+)$/);
+    if (numberedQuestion) {
+      beforeFirstSection = false;
+      pushCurrent();
+      pushResource();
+      current = {
+        number: Number(numberedQuestion[1]),
+        title: stripMarkdown(numberedQuestion[2]),
+        sectionTitle,
+        body: []
+      };
+      continue;
+    }
+
+    const sectionMatch = line.match(/^#\s+SECTION\s+\d+\s+—\s+(.+)$/i);
+    if (sectionMatch) {
+      beforeFirstSection = false;
+      pushCurrent();
+      pushResource();
+      sectionTitle = stripMarkdown(sectionMatch[1]);
+      if (sectionTitle === "Questions to Ask the Recruiter at the End") {
+        resource = {
+          title: "Recruiter Question Strategy",
+          sectionTitle,
+          body: []
+        };
+      }
+      continue;
+    }
+
+    const finalTipsMatch = line.match(/^#\s+Final Tips Before the Call\s*$/i);
+    if (finalTipsMatch) {
+      pushCurrent();
+      pushResource();
+      sectionTitle = "Final Tips";
+      resource = {
+        title: "Final Tips Before the Call",
+        sectionTitle,
+        body: []
+      };
+      continue;
+    }
+
+    const resourceHeading = line.match(/^##\s+(.+)$/);
+    if (resourceHeading && sectionTitle === "Questions to Ask the Recruiter at the End") {
+      pushCurrent();
+      pushResource();
+      const resourceTitle = stripMarkdown(resourceHeading[1]);
+      resource = {
+        title: resourceTitle,
+        sectionTitle,
+        body: []
+      };
+      continue;
+    }
+
+    if (current) {
+      current.body.push(line);
+    } else if (resource) {
+      resource.body.push(line);
+    } else if (beforeFirstSection) {
+      introLines.push(line);
+    }
+  }
+
+  pushCurrent();
+  pushResource();
+
+  const intro = trimBlankLines(introLines).join("\n").trim();
+  if (intro) {
+    sections.unshift({
+      title: "Overview",
+      items: [
+        {
+          type: "resource",
+          title: "OPG Interview Prep Overview",
+          body: intro,
+          sourceMarkdown: intro
+        }
+      ]
+    });
+  }
+
+  if (!sections.length) return [];
+
+  const activeQuestion = {
+    user_id: userId,
+    source_id: "OPG-QUESTION-BANK",
+    title: "OPG Interview — Full Question Bank",
+    prompt: "Practice every OPG interview answer from the full prep file on one categorized page.",
+    answer: markdown.trim(),
+    category: "OPG Interview Prep",
+    track: "OPG Interview",
+    difficulty: "medium",
+    tags: ["opg", "phone-screen", "question-bank"],
+    source_file: "sources/PREP_OPG_INTERVIEW_QUESTION_BANK.md",
+    story_links: [],
+    status: "new",
+    notes: "Imported as a single categorized OPG prep page. Question answers are collapsed by default.",
+    structured_content: {
+      kind: "opg",
+      metadata: {
+        sourceId: "OPG-QUESTION-BANK",
+        aggregate: "true"
+      },
+      opgSections: sections,
+      sourceMarkdown: markdown.trim()
+    },
+    question_group: "behavioral",
+    behavioral_type: "phone_interview",
+    technical_type: null
+  };
+
+  const legacyIds = [
+    "OPG-OVERVIEW",
+    "OPG-RECRUITER-INTRO",
+    "OPG-RECRUITER-1",
+    "OPG-RECRUITER-2",
+    "OPG-RECRUITER-3",
+    "OPG-RECRUITER-4",
+    "OPG-FINAL-TIPS",
+    ...Array.from({ length: 30 }, (_, index) => `OPG-Q${String(index + 1).padStart(2, "0")}`)
+  ];
+
+  return [activeQuestion, ...legacyIds.map((sourceId) => makeArchivedOpgSeed(sourceId))];
+}
+
 function titleFromStoryMarkdown(markdown, fallbackId) {
   const heading = markdown.match(/^#\s+(S\d{3})\s+—\s+(.+)$/m);
   if (heading) {
@@ -401,7 +615,8 @@ function parseStoryFiles() {
 }
 
 const markdown = fs.readFileSync(bankPath, "utf8");
-const questions = [...parseConceptualBank(markdown), ...parseStoryFiles()];
+const opgMarkdown = fs.existsSync(opgBankPath) ? fs.readFileSync(opgBankPath, "utf8") : "";
+const questions = [...parseConceptualBank(markdown), ...parseOpgQuestionBank(opgMarkdown), ...parseStoryFiles()];
 
 if (!questions.length) {
   console.log("No questions found to import.");
@@ -417,4 +632,4 @@ if (error) {
   process.exit(1);
 }
 
-console.log(`Imported ${questions.length} record(s): conceptual questions plus story files.`);
+console.log(`Imported ${questions.length} record(s): conceptual questions, OPG prep bank, and story files.`);
