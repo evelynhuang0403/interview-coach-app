@@ -5,8 +5,15 @@ import { saveQuestion } from "@/lib/data";
 import type { MarkdownTable, OpgQuestionBankItem, Question, QuestionInput, StructuredContent, StructuredSection } from "@/lib/types";
 import { statusLabel } from "@/lib/format";
 
+function normalizeMarkdownText(text: string) {
+  return text
+    .replace(/^>\s*$/gm, "\n")
+    .replace(/^>\s?/gm, "");
+}
+
 function cleanMarkup(text: string) {
   return text
+    .replace(/^>\s*$/gm, "\n")
     .replace(/\*\*(.*?)\*\*/g, "$1")
     .replace(/\*(.*?)\*/g, "$1")
     .replace(/`([^`]+)`/g, "$1")
@@ -15,8 +22,9 @@ function cleanMarkup(text: string) {
 }
 
 function MarkdownText({ text }: { text: string }) {
-  const blocks = cleanMarkup(text)
-    .split(/\n{2,}/)
+  const blocks = normalizeMarkdownText(text)
+    .split(/\n\s*\n/)
+    .map(cleanMarkup)
     .map((block) => block.trim())
     .filter(Boolean);
 
@@ -397,12 +405,23 @@ function KeywordTrack({ items }: { items?: string[] }) {
   );
 }
 
+function RecallCue({ item }: { item: OpgQuestionBankItem }) {
+  if (item.keywordTrack?.length) return <KeywordTrack items={item.keywordTrack} />;
+  return (
+    <div className="keyword-track">
+      <div className="keyword-track-label">Recall cue</div>
+      <p style={{ margin: 0 }}>{item.title}</p>
+    </div>
+  );
+}
+
 function sourceFromOpgItem(item: OpgQuestionBankItem) {
   if (item.type !== "question") return item.body ?? "";
   const keywordTrack = item.keywordTrack?.length
     ? `\n\n**Keyword track:**\n${item.keywordTrack.map((line) => `- ${line}`).join("\n")}`
     : "";
-  return `${item.answer ?? ""}${keywordTrack}`.trim();
+  const deliveryNotes = item.deliveryNotes ? `\n\n**Delivery notes:**\n${item.deliveryNotes}` : "";
+  return `${item.answer ?? ""}${keywordTrack}${deliveryNotes}`.trim();
 }
 
 function questionToInput(question: Question): QuestionInput {
@@ -440,6 +459,7 @@ function OpgQuestionEditor({
   const [title, setTitle] = useState(item.title);
   const [answer, setAnswer] = useState(item.answer ?? "");
   const [keywordTrack, setKeywordTrack] = useState((item.keywordTrack ?? []).join("\n"));
+  const [deliveryNotes, setDeliveryNotes] = useState(item.deliveryNotes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -453,7 +473,8 @@ function OpgQuestionEditor({
       keywordTrack: keywordTrack
         .split(/\r?\n/)
         .map((line) => line.replace(/^\s*-\s+/, "").trim())
-        .filter(Boolean)
+        .filter(Boolean),
+      deliveryNotes: deliveryNotes.trim()
     };
     nextItem.sourceMarkdown = sourceFromOpgItem(nextItem);
     try {
@@ -479,6 +500,10 @@ function OpgQuestionEditor({
         <span>Keyword track</span>
         <textarea className="textarea" rows={6} value={keywordTrack} onChange={(event) => setKeywordTrack(event.target.value)} />
       </label>
+      <label>
+        <span>Delivery notes</span>
+        <textarea className="textarea" rows={6} value={deliveryNotes} onChange={(event) => setDeliveryNotes(event.target.value)} />
+      </label>
       {error ? <div className="notice">{error}</div> : null}
       <div className="row-3">
         <button className="button primary" onClick={handleSave} disabled={saving}>
@@ -495,6 +520,7 @@ function OpgQuestionEditor({
 function OpgQuestionView({ question, content }: { question: Question; content: StructuredContent }) {
   const [opgSections, setOpgSections] = useState(content.opgSections ?? []);
   const [editingKey, setEditingKey] = useState("");
+  const binderTitle = content.metadata?.binderTitle ?? "OPG Prep Binder";
 
   async function saveOpgItem(sectionIndex: number, itemIndex: number, nextItem: OpgQuestionBankItem) {
     const nextSections = opgSections.map((section, currentSectionIndex) => {
@@ -521,7 +547,7 @@ function OpgQuestionView({ question, content }: { question: Question; content: S
     <div className="structured-grid">
       <section className="panel hero-panel">
         <div className="panel-header">
-          <h2>OPG Prep Binder</h2>
+          <h2>{binderTitle}</h2>
           <span className={`pill ${question.status}`}>{statusLabel(question.status)}</span>
         </div>
         <div className="panel-body">
@@ -541,12 +567,13 @@ function OpgQuestionView({ question, content }: { question: Question; content: S
           </div>
           <div className="panel-body disclosure-list">
             {section.items.map((item, itemIndex) => {
-              const itemKey = `${section.title}-${item.type}-${item.number ?? item.title}`;
+              const itemKey = `${section.title}-${item.type}-${item.label ?? item.title}`;
               const isEditing = editingKey === itemKey;
+              const itemLabel = item.type === "question" && item.label ? `${item.label}. ` : "";
               return (
               <details className="disclosure opg-disclosure" key={itemKey}>
                 <summary>
-                  <span>{item.type === "question" && item.number ? `#${item.number}. ` : ""}{item.title}</span>
+                  <span>{itemLabel}{item.title}</span>
                   <span className="opg-summary-actions">
                     {item.type === "question" ? (
                       <button
@@ -571,9 +598,19 @@ function OpgQuestionView({ question, content }: { question: Question; content: S
                       onSave={(nextItem) => saveOpgItem(sectionIndex, itemIndex, nextItem)}
                     />
                   ) : item.type === "question" ? (
-                    <MaskedBlock title="answer" initialVisible={false} hiddenContent={<KeywordTrack items={item.keywordTrack} />}>
-                      <MarkdownText text={item.answer ?? ""} />
-                    </MaskedBlock>
+                    <>
+                    <MaskedBlock title="answer" hiddenContent={<RecallCue item={item} />}>
+                        <MarkdownText text={item.answer ?? ""} />
+                      </MaskedBlock>
+                      {item.deliveryNotes ? (
+                        <details className="disclosure">
+                          <summary>Delivery notes</summary>
+                          <div className="disclosure-body">
+                            <MarkdownText text={item.deliveryNotes} />
+                          </div>
+                        </details>
+                      ) : null}
+                    </>
                   ) : (
                     <MarkdownText text={item.body ?? ""} />
                   )}

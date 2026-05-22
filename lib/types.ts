@@ -93,9 +93,11 @@ export type StoryInterviewQuestion = {
 export type OpgQuestionBankItem = {
   type: "question" | "resource";
   number?: number;
+  label?: string;
   title: string;
   answer?: string;
   keywordTrack?: string[];
+  deliveryNotes?: string;
   body?: string;
   sourceMarkdown?: string;
 };

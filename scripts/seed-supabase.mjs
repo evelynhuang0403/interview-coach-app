@@ -10,6 +10,7 @@ loadEnvConfig(root);
 
 const bankPath = path.join(root, "sources", "conceptual_question_bank.md");
 const opgBankPath = path.join(root, "sources", "PREP_OPG_INTERVIEW_QUESTION_BANK.md");
+const hrScreeningPath = path.join(root, "sources", "PREP_30_HR_SCREENING_QS.md");
 const storiesDir = path.join(root, "sources", "stories");
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -48,6 +49,14 @@ function trimBlankLines(lines) {
   while (copy.length && !copy[0].trim()) copy.shift();
   while (copy.length && !copy[copy.length - 1].trim()) copy.pop();
   return copy;
+}
+
+function stripHorizontalRules(markdown) {
+  return markdown
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*---+\s*$/.test(line))
+    .join("\n")
+    .trim();
 }
 
 function splitSections(markdown) {
@@ -348,7 +357,8 @@ function parseConceptualBank(markdown) {
 }
 
 function splitOpgQuestionBody(body) {
-  const [answerPart, keywordPart = ""] = body.split(/\n\*\*Keyword track:\*\*[^\n]*\n/i);
+  const [answerPart, afterAnswer = ""] = body.split(/\n\*\*Keyword track:\*\*[^\n]*\n/i);
+  const [keywordPart = "", deliveryNotes = ""] = afterAnswer.split(/\n\*\*Delivery notes:\*\*[^\n]*\n/i);
   const keywordTrack = keywordPart
     .split(/\r?\n/)
     .filter((line) => line.trim().startsWith("- "))
@@ -356,7 +366,8 @@ function splitOpgQuestionBody(body) {
 
   return {
     answer: answerPart.trim(),
-    keywordTrack
+    keywordTrack,
+    deliveryNotes: deliveryNotes.trim()
   };
 }
 
@@ -403,14 +414,16 @@ function parseOpgQuestionBank(markdown) {
   function pushCurrent() {
     if (!current) return;
     const body = trimBlankLines(current.body).join("\n").trim();
-    const { answer, keywordTrack } = splitOpgQuestionBody(body);
-    if (answer) {
+    const { answer, keywordTrack, deliveryNotes } = splitOpgQuestionBody(body);
+    if (answer || keywordTrack.length || deliveryNotes) {
       getSection(current.sectionTitle).items.push({
         type: "question",
         number: current.number,
+        label: current.label,
         title: current.title,
         answer,
         keywordTrack,
+        deliveryNotes,
         sourceMarkdown: body
       });
     }
@@ -433,14 +446,17 @@ function parseOpgQuestionBank(markdown) {
   }
 
   for (const line of lines) {
-    const numberedQuestion = line.match(/^##\s+#(\d+)\.\s+(.+)$/);
-    if (numberedQuestion) {
+    const questionMatch = line.match(/^##\s+((?:#\d+[A-Z]?|T\d+)\.)\s+(.+)$/);
+    if (questionMatch) {
       beforeFirstSection = false;
       pushCurrent();
       pushResource();
+      const label = questionMatch[1].replace(/\.$/, "");
+      const number = label.startsWith("#") ? Number(label.match(/\d+/)?.[0] ?? 0) : undefined;
       current = {
-        number: Number(numberedQuestion[1]),
-        title: stripMarkdown(numberedQuestion[2]),
+        number,
+        label,
+        title: stripMarkdown(questionMatch[2]),
         sectionTitle,
         body: []
       };
@@ -554,10 +570,174 @@ function parseOpgQuestionBank(markdown) {
     "OPG-RECRUITER-3",
     "OPG-RECRUITER-4",
     "OPG-FINAL-TIPS",
-    ...Array.from({ length: 30 }, (_, index) => `OPG-Q${String(index + 1).padStart(2, "0")}`)
+    ...Array.from({ length: 30 }, (_, index) => `OPG-Q${String(index + 1).padStart(2, "0")}`),
+    "OPG-Q1B",
+    "OPG-Q2B",
+    "OPG-Q3B",
+    ...Array.from({ length: 15 }, (_, index) => `OPG-T${index + 1}`)
   ];
 
   return [activeQuestion, ...legacyIds.map((sourceId) => makeArchivedOpgSeed(sourceId))];
+}
+
+function parseHrScreeningBank(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const sections = [];
+  const introLines = [];
+  let sectionTitle = "Overview";
+  let current = null;
+  let resource = null;
+  let beforeFirstSection = true;
+
+  function getSection(title) {
+    let section = sections.find((item) => item.title === title);
+    if (!section) {
+      section = { title, items: [] };
+      sections.push(section);
+    }
+    return section;
+  }
+
+  function pushCurrent() {
+    if (!current) return;
+    const answer = stripHorizontalRules(trimBlankLines(current.body).join("\n"));
+    if (answer) {
+      getSection(current.sectionTitle).items.push({
+        type: "question",
+        number: current.number,
+        label: current.label,
+        title: current.title,
+        answer,
+        sourceMarkdown: answer
+      });
+    }
+    current = null;
+  }
+
+  function pushResource() {
+    if (!resource) return;
+    const body = stripHorizontalRules(trimBlankLines(resource.body).join("\n"));
+    if (body) {
+      getSection(resource.sectionTitle).items.push({
+        type: "resource",
+        title: resource.title,
+        body,
+        keywordTrack: parseBullets(body),
+        sourceMarkdown: body
+      });
+    }
+    resource = null;
+  }
+
+  for (const line of lines) {
+    const questionMatch = line.match(/^##\s+#(\d+)\.\s+(.+)$/);
+    if (questionMatch) {
+      beforeFirstSection = false;
+      pushCurrent();
+      pushResource();
+      const number = Number(questionMatch[1]);
+      current = {
+        number,
+        label: `#${number}`,
+        title: stripMarkdown(questionMatch[2]),
+        sectionTitle,
+        body: []
+      };
+      continue;
+    }
+
+    const sectionMatch = line.match(/^#\s+(.+)$/);
+    if (sectionMatch) {
+      beforeFirstSection = false;
+      pushCurrent();
+      pushResource();
+      const nextTitle = stripMarkdown(sectionMatch[1]);
+      if (/^30 HR Screening Questions/i.test(nextTitle)) {
+        beforeFirstSection = true;
+        continue;
+      }
+      sectionTitle = nextTitle;
+      if (/Delivery Notes|Cross-references/i.test(sectionTitle)) {
+        resource = {
+          title: sectionTitle,
+          sectionTitle,
+          body: []
+        };
+      }
+      continue;
+    }
+
+    const resourceHeading = line.match(/^##\s+(.+)$/);
+    if (resourceHeading && resource) {
+      pushResource();
+      const resourceTitle = stripMarkdown(resourceHeading[1]);
+      resource = {
+        title: resourceTitle,
+        sectionTitle,
+        body: []
+      };
+      continue;
+    }
+
+    if (current) {
+      current.body.push(line);
+    } else if (resource) {
+      resource.body.push(line);
+    } else if (beforeFirstSection) {
+      introLines.push(line);
+    }
+  }
+
+  pushCurrent();
+  pushResource();
+
+  const intro = trimBlankLines(introLines).join("\n").trim();
+  if (intro) {
+    sections.unshift({
+      title: "Overview",
+      items: [
+        {
+          type: "resource",
+          title: "30 HR Screening Questions Overview",
+          body: intro,
+          sourceMarkdown: intro
+        }
+      ]
+    });
+  }
+
+  if (!sections.length) return [];
+
+  return [
+    {
+      user_id: userId,
+      source_id: "HR-SCREENING-30",
+      title: "30 HR Screening Questions",
+      prompt: "Practice the 30 short HR screening answers on one categorized page.",
+      answer: markdown.trim(),
+      category: "HR Screening Prep",
+      track: "HR Screening",
+      difficulty: "easy",
+      tags: ["hr-screening", "phone-screen", "question-bank"],
+      source_file: "sources/PREP_30_HR_SCREENING_QS.md",
+      story_links: [],
+      status: "new",
+      notes: "Imported as a single categorized HR screening prep page. Answers are collapsed by default.",
+      structured_content: {
+        kind: "opg",
+        metadata: {
+          sourceId: "HR-SCREENING-30",
+          aggregate: "true",
+          binderTitle: "HR Screening Binder"
+        },
+        opgSections: sections,
+        sourceMarkdown: markdown.trim()
+      },
+      question_group: "behavioral",
+      behavioral_type: "phone_interview",
+      technical_type: null
+    }
+  ];
 }
 
 function titleFromStoryMarkdown(markdown, fallbackId) {
@@ -616,7 +796,13 @@ function parseStoryFiles() {
 
 const markdown = fs.readFileSync(bankPath, "utf8");
 const opgMarkdown = fs.existsSync(opgBankPath) ? fs.readFileSync(opgBankPath, "utf8") : "";
-const questions = [...parseConceptualBank(markdown), ...parseOpgQuestionBank(opgMarkdown), ...parseStoryFiles()];
+const hrScreeningMarkdown = fs.existsSync(hrScreeningPath) ? fs.readFileSync(hrScreeningPath, "utf8") : "";
+const questions = [
+  ...parseConceptualBank(markdown),
+  ...parseOpgQuestionBank(opgMarkdown),
+  ...parseHrScreeningBank(hrScreeningMarkdown),
+  ...parseStoryFiles()
+];
 
 if (!questions.length) {
   console.log("No questions found to import.");
@@ -632,4 +818,4 @@ if (error) {
   process.exit(1);
 }
 
-console.log(`Imported ${questions.length} record(s): conceptual questions, OPG prep bank, and story files.`);
+console.log(`Imported ${questions.length} record(s): conceptual questions, OPG prep bank, HR screening bank, and story files.`);

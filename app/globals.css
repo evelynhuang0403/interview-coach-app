@@ -798,9 +798,10 @@ em { font-style: italic; }
 .notice { padding: var(--s-3); border: 1px solid #e8c1b7; background: var(--hanko-soft); color: var(--hanko-strong); border-radius: var(--r-paper); font-family: var(--font-serif); }
 .empty { padding: var(--s-5); text-align: center; color: var(--ink-soft); font-family: var(--font-serif); }
 .answer, .review-prompt, .rich-text { white-space: pre-wrap; line-height: 1.7; font-family: var(--font-serif); overflow-wrap: anywhere; }
-.rich-text p { margin: 0 0 var(--s-3); }
+.rich-text p { margin: 0 0 var(--s-4); }
 .rich-text p:last-child { margin-bottom: 0; }
-.rich-text ul, .check-list { margin: 0; padding-left: 20px; line-height: 1.7; font-family: var(--font-serif); }
+.rich-text ul, .check-list { margin: 0 0 var(--s-4); padding-left: 20px; line-height: 1.7; font-family: var(--font-serif); }
+.rich-text ul:last-child, .check-list:last-child { margin-bottom: 0; }
 
 .masked-block, .mask { position: relative; min-width: 0; padding: var(--s-4); background: var(--paper-soft); border: 1px solid var(--paper-3); border-radius: var(--r-paper); }
 .masked-block.masked, .masked-placeholder {
@@ -980,10 +981,52 @@ em { font-style: italic; }
   .nav .link { justify-content: flex-start; min-height: 40px; }
   .aside > .button { width: 100%; }
   .main { padding: var(--s-4) var(--s-3) var(--s-5); }
-  .paper, .panel-body { padding: var(--s-4); }
+  .paper, .panel-body { padding: var(--s-3); }
+  .panel-header { padding: var(--s-3); }
   .panel-header { align-items: flex-start; flex-wrap: wrap; }
   .h-display { font-size: 34px; }
-  .h-title { font-size: 23px; }
+  .h-title { font-size: 22px; }
+  .detail-left .h-title { font-size: 24px !important; }
+  .panel-header h2 { font-size: 16px; }
+  .answer, .review-prompt, .rich-text {
+    font-size: 14px;
+    line-height: 1.48;
+  }
+  .rich-text p { margin-bottom: var(--s-4); }
+  .rich-text ul, .check-list {
+    font-size: 14px;
+    line-height: 1.48;
+    margin-bottom: var(--s-3);
+    padding-left: 18px;
+  }
+  .masked-block, .mask {
+    padding: var(--s-3);
+  }
+  .keyword-track {
+    font-size: 13px;
+    line-height: 1.42;
+    padding: var(--s-3);
+  }
+  .keyword-track ul { padding-left: 17px; }
+  .disclosure, .source-toggle {
+    padding: var(--s-2);
+  }
+  .disclosure-body, .disclosure-list {
+    gap: var(--s-2);
+    margin-top: var(--s-2);
+  }
+  .opg-disclosure summary {
+    align-items: flex-start;
+    gap: var(--s-2);
+  }
+  .opg-disclosure summary span:first-child {
+    font-size: 14px;
+    line-height: 1.28;
+  }
+  .opg-summary-actions .button {
+    min-height: 32px;
+    padding: var(--s-1) var(--s-2);
+  }
   .button, .icon-button { white-space: normal; }
   .between { align-items: flex-start; flex-wrap: wrap; }
   .streak-card { padding: 112px var(--s-4) var(--s-4); }
