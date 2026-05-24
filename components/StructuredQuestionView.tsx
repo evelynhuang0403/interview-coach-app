@@ -580,9 +580,11 @@ function OpgQuestionView({ question, content }: { question: Question; content: S
               return (
               <details className="disclosure opg-disclosure" key={itemKey}>
                 <summary>
-                  <span>{itemLabel}{item.title}</span>
+                  <span className="opg-summary-title">
+                    <span>{itemLabel}{item.title}</span>
+                    {item.type === "question" && item.behavioralLabel ? <span className="opg-behavior-tag">{item.behavioralLabel}</span> : null}
+                  </span>
                   <span className="opg-summary-actions">
-                    {item.type === "question" && item.behavioralLabel ? <span className="pill">{item.behavioralLabel}</span> : null}
                     {item.type === "question" ? (
                       <button
                         className="button"

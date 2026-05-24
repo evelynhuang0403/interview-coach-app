@@ -454,7 +454,7 @@ function parseOpgQuestionBank(markdown) {
   }
 
   for (const line of lines) {
-    const questionMatch = line.match(/^##\s+((?:#\d+[A-Z]?|T\d+)\.)\s+(.+)$/);
+    const questionMatch = line.match(/^##\s+((?:#\d+[A-Z]?|T\d+[A-Z]?)\.)\s+(.+)$/i);
     if (questionMatch) {
       beforeFirstSection = false;
       pushCurrent();
