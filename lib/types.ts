@@ -94,6 +94,7 @@ export type OpgQuestionBankItem = {
   type: "question" | "resource";
   number?: number;
   label?: string;
+  behavioralLabel?: string;
   title: string;
   answer?: string;
   keywordTrack?: string[];

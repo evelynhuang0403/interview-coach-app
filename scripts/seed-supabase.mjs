@@ -359,13 +359,20 @@ function parseConceptualBank(markdown) {
 function splitOpgQuestionBody(body) {
   const [answerPart, afterAnswer = ""] = body.split(/\n\*\*Keyword track:\*\*[^\n]*\n/i);
   const [keywordPart = "", deliveryNotes = ""] = afterAnswer.split(/\n\*\*Delivery notes:\*\*[^\n]*\n/i);
+  const behavioralLabel = answerPart.match(/^\*\*Label:\*\*\s*(.+)$/im)?.[1]?.trim() ?? "";
+  const answer = answerPart
+    .split(/\r?\n/)
+    .filter((line) => !/^\*\*Label:\*\*/i.test(line.trim()))
+    .join("\n")
+    .trim();
   const keywordTrack = keywordPart
     .split(/\r?\n/)
     .filter((line) => line.trim().startsWith("- "))
     .map((line) => cleanInline(line.replace(/^\s*-\s+/, "")));
 
   return {
-    answer: answerPart.trim(),
+    behavioralLabel: cleanInline(behavioralLabel),
+    answer,
     keywordTrack,
     deliveryNotes: deliveryNotes.trim()
   };
@@ -414,12 +421,13 @@ function parseOpgQuestionBank(markdown) {
   function pushCurrent() {
     if (!current) return;
     const body = trimBlankLines(current.body).join("\n").trim();
-    const { answer, keywordTrack, deliveryNotes } = splitOpgQuestionBody(body);
+    const { behavioralLabel, answer, keywordTrack, deliveryNotes } = splitOpgQuestionBody(body);
     if (answer || keywordTrack.length || deliveryNotes) {
       getSection(current.sectionTitle).items.push({
         type: "question",
         number: current.number,
         label: current.label,
+        behavioralLabel,
         title: current.title,
         answer,
         keywordTrack,

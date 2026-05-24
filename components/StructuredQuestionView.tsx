@@ -417,11 +417,12 @@ function RecallCue({ item }: { item: OpgQuestionBankItem }) {
 
 function sourceFromOpgItem(item: OpgQuestionBankItem) {
   if (item.type !== "question") return item.body ?? "";
+  const behavioralLabel = item.behavioralLabel ? `**Label:** ${item.behavioralLabel}\n\n` : "";
   const keywordTrack = item.keywordTrack?.length
     ? `\n\n**Keyword track:**\n${item.keywordTrack.map((line) => `- ${line}`).join("\n")}`
     : "";
   const deliveryNotes = item.deliveryNotes ? `\n\n**Delivery notes:**\n${item.deliveryNotes}` : "";
-  return `${item.answer ?? ""}${keywordTrack}${deliveryNotes}`.trim();
+  return `${behavioralLabel}${item.answer ?? ""}${keywordTrack}${deliveryNotes}`.trim();
 }
 
 function questionToInput(question: Question): QuestionInput {
@@ -457,6 +458,7 @@ function OpgQuestionEditor({
   onSave: (item: OpgQuestionBankItem) => Promise<void>;
 }) {
   const [title, setTitle] = useState(item.title);
+  const [behavioralLabel, setBehavioralLabel] = useState(item.behavioralLabel ?? "");
   const [answer, setAnswer] = useState(item.answer ?? "");
   const [keywordTrack, setKeywordTrack] = useState((item.keywordTrack ?? []).join("\n"));
   const [deliveryNotes, setDeliveryNotes] = useState(item.deliveryNotes ?? "");
@@ -469,6 +471,7 @@ function OpgQuestionEditor({
     const nextItem: OpgQuestionBankItem = {
       ...item,
       title: title.trim() || item.title,
+      behavioralLabel: behavioralLabel.trim(),
       answer: answer.trim(),
       keywordTrack: keywordTrack
         .split(/\r?\n/)
@@ -491,6 +494,10 @@ function OpgQuestionEditor({
       <label>
         <span>Question</span>
         <input className="input" value={title} onChange={(event) => setTitle(event.target.value)} />
+      </label>
+      <label>
+        <span>Label</span>
+        <input className="input" value={behavioralLabel} onChange={(event) => setBehavioralLabel(event.target.value)} />
       </label>
       <label>
         <span>Answer</span>
@@ -575,6 +582,7 @@ function OpgQuestionView({ question, content }: { question: Question; content: S
                 <summary>
                   <span>{itemLabel}{item.title}</span>
                   <span className="opg-summary-actions">
+                    {item.type === "question" && item.behavioralLabel ? <span className="pill">{item.behavioralLabel}</span> : null}
                     {item.type === "question" ? (
                       <button
                         className="button"
