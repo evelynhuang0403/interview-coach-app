@@ -98,6 +98,11 @@ export type OpgQuestionBankItem = {
   title: string;
   answer?: string;
   keywordTrack?: string[];
+  storyBreakdown?: {
+    title?: string;
+    body: string;
+    sections: StructuredSection[];
+  };
   deliveryNotes?: string;
   body?: string;
   sourceMarkdown?: string;

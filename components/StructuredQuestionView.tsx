@@ -394,8 +394,8 @@ function StoryQuestionView({ question, content }: { question: Question; content:
 function KeywordTrack({ items }: { items?: string[] }) {
   if (!items?.length) return <div className="masked-placeholder">Answer is hidden for active recall.</div>;
   return (
-    <div className="keyword-track">
-      <div className="keyword-track-label">Keyword track</div>
+    <div className="recall-track">
+      <div className="recall-track-label">Keyword track</div>
       <ul>
         {items.map((item) => (
           <li key={item}>{item}</li>
@@ -405,11 +405,31 @@ function KeywordTrack({ items }: { items?: string[] }) {
   );
 }
 
+function StoryBreakdown({ item, compact = false }: { item: OpgQuestionBankItem; compact?: boolean }) {
+  const breakdown = item.storyBreakdown;
+  if (!breakdown?.body) return null;
+  const sections = breakdown.sections?.length ? breakdown.sections : [{ title: breakdown.title ?? "Story Breakdown", body: breakdown.body }];
+  return (
+    <div className={compact ? "story-breakdown compact" : "story-breakdown"}>
+      <div className="recall-track-label">{breakdown.title ? `Story Breakdown — ${breakdown.title}` : "Story Breakdown"}</div>
+      <div className="story-breakdown-grid">
+        {sections.map((section) => (
+          <article className="story-breakdown-item" key={`${item.label}-${section.title}`}>
+            <h4>{section.title}</h4>
+            <MarkdownText text={section.body} />
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RecallCue({ item }: { item: OpgQuestionBankItem }) {
+  if (item.storyBreakdown?.body) return <StoryBreakdown item={item} compact />;
   if (item.keywordTrack?.length) return <KeywordTrack items={item.keywordTrack} />;
   return (
-    <div className="keyword-track">
-      <div className="keyword-track-label">Recall cue</div>
+    <div className="recall-track">
+      <div className="recall-track-label">Recall cue</div>
       <p style={{ margin: 0 }}>{item.title}</p>
     </div>
   );
@@ -421,8 +441,11 @@ function sourceFromOpgItem(item: OpgQuestionBankItem) {
   const keywordTrack = item.keywordTrack?.length
     ? `\n\n**Keyword track:**\n${item.keywordTrack.map((line) => `- ${line}`).join("\n")}`
     : "";
+  const storyBreakdown = item.storyBreakdown?.body
+    ? `\n\n**Story Breakdown${item.storyBreakdown.title ? ` — ${item.storyBreakdown.title}` : ""}**\n\n${item.storyBreakdown.body}`
+    : "";
   const deliveryNotes = item.deliveryNotes ? `\n\n**Delivery notes:**\n${item.deliveryNotes}` : "";
-  return `${behavioralLabel}${item.answer ?? ""}${keywordTrack}${deliveryNotes}`.trim();
+  return `${behavioralLabel}${item.answer ?? ""}${storyBreakdown}${keywordTrack}${deliveryNotes}`.trim();
 }
 
 function questionToInput(question: Question): QuestionInput {
@@ -460,7 +483,8 @@ function OpgQuestionEditor({
   const [title, setTitle] = useState(item.title);
   const [behavioralLabel, setBehavioralLabel] = useState(item.behavioralLabel ?? "");
   const [answer, setAnswer] = useState(item.answer ?? "");
-  const [keywordTrack, setKeywordTrack] = useState((item.keywordTrack ?? []).join("\n"));
+  const [storyBreakdownTitle, setStoryBreakdownTitle] = useState(item.storyBreakdown?.title ?? "");
+  const [storyBreakdown, setStoryBreakdown] = useState(item.storyBreakdown?.body ?? (item.keywordTrack ?? []).map((line) => `- ${line}`).join("\n"));
   const [deliveryNotes, setDeliveryNotes] = useState(item.deliveryNotes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -473,10 +497,26 @@ function OpgQuestionEditor({
       title: title.trim() || item.title,
       behavioralLabel: behavioralLabel.trim(),
       answer: answer.trim(),
-      keywordTrack: keywordTrack
-        .split(/\r?\n/)
-        .map((line) => line.replace(/^\s*-\s+/, "").trim())
-        .filter(Boolean),
+      keywordTrack: [],
+      storyBreakdown: storyBreakdown.trim()
+        ? {
+            title: storyBreakdownTitle.trim(),
+            body: storyBreakdown.trim(),
+            sections: storyBreakdown
+              .split(/\r?\n/)
+              .reduce<StructuredSection[]>((sections, line) => {
+                const heading = line.match(/^\*\*(.+?)\*\*\s*$/);
+                if (heading) {
+                  sections.push({ title: cleanMarkup(heading[1]), body: "", level: 3 });
+                  return sections;
+                }
+                const current = sections[sections.length - 1];
+                if (current) current.body = `${current.body}\n${line}`.trim();
+                return sections;
+              }, [])
+              .filter((section) => section.body)
+          }
+        : undefined,
       deliveryNotes: deliveryNotes.trim()
     };
     nextItem.sourceMarkdown = sourceFromOpgItem(nextItem);
@@ -504,8 +544,12 @@ function OpgQuestionEditor({
         <textarea className="textarea" rows={8} value={answer} onChange={(event) => setAnswer(event.target.value)} />
       </label>
       <label>
-        <span>Keyword track</span>
-        <textarea className="textarea" rows={6} value={keywordTrack} onChange={(event) => setKeywordTrack(event.target.value)} />
+        <span>Story breakdown title</span>
+        <input className="input" value={storyBreakdownTitle} onChange={(event) => setStoryBreakdownTitle(event.target.value)} placeholder="Career Path Walkthrough" />
+      </label>
+      <label>
+        <span>Story breakdown</span>
+        <textarea className="textarea" rows={10} value={storyBreakdown} onChange={(event) => setStoryBreakdown(event.target.value)} />
       </label>
       <label>
         <span>Delivery notes</span>
@@ -609,9 +653,10 @@ function OpgQuestionView({ question, content }: { question: Question; content: S
                     />
                   ) : item.type === "question" ? (
                     <>
-                    <MaskedBlock title="answer" hiddenContent={<RecallCue item={item} />}>
+                      <MaskedBlock title="answer" hiddenContent={<RecallCue item={item} />}>
                         <MarkdownText text={item.answer ?? ""} />
                       </MaskedBlock>
+                      <StoryBreakdown item={item} />
                       {item.deliveryNotes ? (
                         <details className="disclosure">
                           <summary>Delivery notes</summary>

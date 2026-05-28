@@ -357,23 +357,56 @@ function parseConceptualBank(markdown) {
 }
 
 function splitOpgQuestionBody(body) {
-  const [answerPart, afterAnswer = ""] = body.split(/\n\*\*Keyword track:\*\*[^\n]*\n/i);
-  const [keywordPart = "", deliveryNotes = ""] = afterAnswer.split(/\n\*\*Delivery notes:\*\*[^\n]*\n/i);
+  const storyBreakdownMatch = body.match(/\n\*\*Story Breakdown\s*(?:—|-)?\s*([^*\n]*)\*\*\s*\n/i);
+  const keywordTrackMatch = body.match(/\n\*\*Keyword track:\*\*[^\n]*\n/i);
+  const splitMatch = storyBreakdownMatch ?? keywordTrackMatch;
+  const answerPart = splitMatch ? body.slice(0, splitMatch.index).trim() : body;
+  const afterAnswer = splitMatch ? body.slice((splitMatch.index ?? 0) + splitMatch[0].length) : "";
+  const [detailPart = "", deliveryNotes = ""] = afterAnswer.split(/\n\*\*Delivery notes:\*\*[^\n]*\n/i);
   const behavioralLabel = answerPart.match(/^\*\*Label:\*\*\s*(.+)$/im)?.[1]?.trim() ?? "";
   const answer = answerPart
     .split(/\r?\n/)
     .filter((line) => !/^\*\*Label:\*\*/i.test(line.trim()))
     .join("\n")
     .trim();
-  const keywordTrack = keywordPart
+  const keywordTrack = keywordTrackMatch
+    ? detailPart
+        .split(/\r?\n/)
+        .filter((line) => line.trim().startsWith("- "))
+        .map((line) => cleanInline(line.replace(/^\s*-\s+/, "")))
+    : [];
+  const storyBreakdownBody = storyBreakdownMatch ? detailPart.trim() : "";
+  const storyBreakdownSections = storyBreakdownBody
     .split(/\r?\n/)
-    .filter((line) => line.trim().startsWith("- "))
-    .map((line) => cleanInline(line.replace(/^\s*-\s+/, "")));
+    .reduce((sections, line) => {
+      const heading = line.match(/^\*\*(.+?)\*\*\s*$/);
+      if (heading) {
+        sections.push({
+          title: cleanInline(heading[1]),
+          body: "",
+          level: 3
+        });
+        return sections;
+      }
+      const current = sections[sections.length - 1];
+      if (current) {
+        current.body = `${current.body}\n${line}`.trim();
+      }
+      return sections;
+    }, [])
+    .filter((section) => section.body);
 
   return {
     behavioralLabel: cleanInline(behavioralLabel),
     answer,
     keywordTrack,
+    storyBreakdown: storyBreakdownBody
+      ? {
+          title: cleanInline(storyBreakdownMatch?.[1] ?? "Story Breakdown"),
+          body: storyBreakdownBody,
+          sections: storyBreakdownSections
+        }
+      : undefined,
     deliveryNotes: deliveryNotes.trim()
   };
 }
@@ -421,8 +454,8 @@ function parseOpgQuestionBank(markdown) {
   function pushCurrent() {
     if (!current) return;
     const body = trimBlankLines(current.body).join("\n").trim();
-    const { behavioralLabel, answer, keywordTrack, deliveryNotes } = splitOpgQuestionBody(body);
-    if (answer || keywordTrack.length || deliveryNotes) {
+    const { behavioralLabel, answer, keywordTrack, storyBreakdown, deliveryNotes } = splitOpgQuestionBody(body);
+    if (answer || keywordTrack.length || storyBreakdown || deliveryNotes) {
       getSection(current.sectionTitle).items.push({
         type: "question",
         number: current.number,
@@ -431,6 +464,7 @@ function parseOpgQuestionBank(markdown) {
         title: current.title,
         answer,
         keywordTrack,
+        storyBreakdown,
         deliveryNotes,
         sourceMarkdown: body
       });
@@ -546,7 +580,7 @@ function parseOpgQuestionBank(markdown) {
     user_id: userId,
     source_id: "OPG-QUESTION-BANK",
     title: "OPG Interview — Full Question Bank",
-    prompt: "Practice every OPG interview answer from the full prep file on one categorized page.",
+    prompt: "Practice every OPG interview answer with its story breakdown on one categorized page.",
     answer: markdown.trim(),
     category: "OPG Interview Prep",
     track: "OPG Interview",
@@ -555,7 +589,7 @@ function parseOpgQuestionBank(markdown) {
     source_file: "sources/PREP_OPG_INTERVIEW_QUESTION_BANK.md",
     story_links: [],
     status: "new",
-    notes: "Imported as a single categorized OPG prep page. Question answers are collapsed by default.",
+    notes: "Imported as a single categorized OPG prep page. Story breakdowns are used as recall cues while answers are collapsed.",
     structured_content: {
       kind: "opg",
       metadata: {
