@@ -438,6 +438,7 @@ function RecallCue({ item }: { item: OpgQuestionBankItem }) {
 function sourceFromOpgItem(item: OpgQuestionBankItem) {
   if (item.type !== "question") return item.body ?? "";
   const behavioralLabel = item.behavioralLabel ? `**Label:** ${item.behavioralLabel}\n\n` : "";
+  const priority = item.priority ? `**Priority:** ${item.priority}\n\n` : "";
   const keywordTrack = item.keywordTrack?.length
     ? `\n\n**Keyword track:**\n${item.keywordTrack.map((line) => `- ${line}`).join("\n")}`
     : "";
@@ -445,7 +446,7 @@ function sourceFromOpgItem(item: OpgQuestionBankItem) {
     ? `\n\n**Story Breakdown${item.storyBreakdown.title ? ` — ${item.storyBreakdown.title}` : ""}**\n\n${item.storyBreakdown.body}`
     : "";
   const deliveryNotes = item.deliveryNotes ? `\n\n**Delivery notes:**\n${item.deliveryNotes}` : "";
-  return `${behavioralLabel}${item.answer ?? ""}${storyBreakdown}${keywordTrack}${deliveryNotes}`.trim();
+  return `${behavioralLabel}${priority}${item.answer ?? ""}${storyBreakdown}${keywordTrack}${deliveryNotes}`.trim();
 }
 
 function questionToInput(question: Question): QuestionInput {
@@ -480,11 +481,13 @@ function OpgQuestionEditor({
   onCancel: () => void;
   onSave: (item: OpgQuestionBankItem) => Promise<void>;
 }) {
+  const usesStoryBreakdown = Boolean(item.storyBreakdown);
   const [title, setTitle] = useState(item.title);
   const [behavioralLabel, setBehavioralLabel] = useState(item.behavioralLabel ?? "");
+  const [priority, setPriority] = useState(item.priority ?? "");
   const [answer, setAnswer] = useState(item.answer ?? "");
   const [storyBreakdownTitle, setStoryBreakdownTitle] = useState(item.storyBreakdown?.title ?? "");
-  const [storyBreakdown, setStoryBreakdown] = useState(item.storyBreakdown?.body ?? (item.keywordTrack ?? []).map((line) => `- ${line}`).join("\n"));
+  const [recallCue, setRecallCue] = useState(item.storyBreakdown?.body ?? (item.keywordTrack ?? []).map((line) => `- ${line}`).join("\n"));
   const [deliveryNotes, setDeliveryNotes] = useState(item.deliveryNotes ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -496,13 +499,19 @@ function OpgQuestionEditor({
       ...item,
       title: title.trim() || item.title,
       behavioralLabel: behavioralLabel.trim(),
+      priority: priority.trim(),
       answer: answer.trim(),
-      keywordTrack: [],
-      storyBreakdown: storyBreakdown.trim()
+      keywordTrack: usesStoryBreakdown
+        ? []
+        : recallCue
+            .split(/\r?\n/)
+            .map((line) => line.replace(/^\s*-\s+/, "").trim())
+            .filter(Boolean),
+      storyBreakdown: usesStoryBreakdown && recallCue.trim()
         ? {
             title: storyBreakdownTitle.trim(),
-            body: storyBreakdown.trim(),
-            sections: storyBreakdown
+            body: recallCue.trim(),
+            sections: recallCue
               .split(/\r?\n/)
               .reduce<StructuredSection[]>((sections, line) => {
                 const heading = line.match(/^\*\*(.+?)\*\*\s*$/);
@@ -540,16 +549,25 @@ function OpgQuestionEditor({
         <input className="input" value={behavioralLabel} onChange={(event) => setBehavioralLabel(event.target.value)} />
       </label>
       <label>
+        <span>Priority</span>
+        <select className="select" value={priority} onChange={(event) => setPriority(event.target.value)}>
+          <option value="">None</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+      <label>
         <span>Answer</span>
         <textarea className="textarea" rows={8} value={answer} onChange={(event) => setAnswer(event.target.value)} />
       </label>
       <label>
-        <span>Story breakdown title</span>
-        <input className="input" value={storyBreakdownTitle} onChange={(event) => setStoryBreakdownTitle(event.target.value)} placeholder="Career Path Walkthrough" />
+        <span>{usesStoryBreakdown ? "Story breakdown title" : "Recall cue title"}</span>
+        <input className="input" value={storyBreakdownTitle} onChange={(event) => setStoryBreakdownTitle(event.target.value)} placeholder="Career Path Walkthrough" disabled={!usesStoryBreakdown} />
       </label>
       <label>
-        <span>Story breakdown</span>
-        <textarea className="textarea" rows={10} value={storyBreakdown} onChange={(event) => setStoryBreakdown(event.target.value)} />
+        <span>{usesStoryBreakdown ? "Story breakdown" : "Keyword track"}</span>
+        <textarea className="textarea" rows={10} value={recallCue} onChange={(event) => setRecallCue(event.target.value)} />
       </label>
       <label>
         <span>Delivery notes</span>
@@ -621,11 +639,12 @@ function OpgQuestionView({ question, content }: { question: Question; content: S
               const itemKey = `${section.title}-${item.type}-${item.label ?? item.title}`;
               const isEditing = editingKey === itemKey;
               const itemLabel = item.type === "question" && item.label ? `${item.label}. ` : "";
+              const isHighPriority = item.type === "question" && item.priority?.toLowerCase() === "high";
               return (
               <details className="disclosure opg-disclosure" key={itemKey}>
                 <summary>
                   <span className="opg-summary-title">
-                    <span>{itemLabel}{item.title}</span>
+                    <span className={isHighPriority ? "opg-title-priority" : undefined}>{itemLabel}{item.title}</span>
                     {item.type === "question" && item.behavioralLabel ? <span className="opg-behavior-tag">{item.behavioralLabel}</span> : null}
                   </span>
                   <span className="opg-summary-actions">
@@ -641,6 +660,7 @@ function OpgQuestionView({ question, content }: { question: Question; content: S
                         Edit
                       </button>
                     ) : null}
+                    {isHighPriority ? <span className="pill priority">high priority</span> : null}
                     <span className="pill">{item.type === "question" ? "answer" : "notes"}</span>
                   </span>
                 </summary>

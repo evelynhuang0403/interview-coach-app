@@ -913,6 +913,10 @@ em { font-style: italic; }
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.opg-title-priority {
+  color: var(--hanko-strong);
+  font-weight: 800;
+}
 .opg-behavior-tag {
   align-self: start;
   background: #fff7df;
@@ -954,6 +958,7 @@ em { font-style: italic; }
 .mapping-list, .meta { display: flex; flex-wrap: wrap; gap: var(--s-2); color: var(--ink-soft); }
 .mapping-list span, .pill { display: inline-flex; align-items: center; gap: var(--s-1); padding: 3px 8px; border-radius: var(--r-pill); background: var(--paper-soft); border: 1px solid var(--paper-3); font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; color: var(--ink-soft); max-width: 100%; overflow-wrap: anywhere; }
 .pill.hanko, .pill.needs_practice { background: var(--hanko-soft); border-color: #e8c1b7; color: var(--hanko-strong); }
+.pill.priority { background: var(--hanko-soft); border-color: #e8c1b7; color: var(--hanko-strong); font-weight: 700; }
 .pill.confident { background: var(--forest-soft); border-color: #b6d2b7; color: var(--forest); }
 .pill.reviewing { background: var(--indigo-soft); border-color: #c2cbe7; color: var(--indigo); }
 

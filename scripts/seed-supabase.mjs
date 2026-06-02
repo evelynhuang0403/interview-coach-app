@@ -11,6 +11,7 @@ loadEnvConfig(root);
 const bankPath = path.join(root, "sources", "conceptual_question_bank.md");
 const opgBankPath = path.join(root, "sources", "PREP_OPG_INTERVIEW_QUESTION_BANK.md");
 const hrScreeningPath = path.join(root, "sources", "PREP_30_HR_SCREENING_QS.md");
+const qaBehavioralPath = path.join(root, "sources", "PREP_QA_20_BQs.md");
 const storiesDir = path.join(root, "sources", "stories");
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -364,9 +365,11 @@ function splitOpgQuestionBody(body) {
   const afterAnswer = splitMatch ? body.slice((splitMatch.index ?? 0) + splitMatch[0].length) : "";
   const [detailPart = "", deliveryNotes = ""] = afterAnswer.split(/\n\*\*Delivery notes:\*\*[^\n]*\n/i);
   const behavioralLabel = answerPart.match(/^\*\*Label:\*\*\s*(.+)$/im)?.[1]?.trim() ?? "";
+  const priority = answerPart.match(/^\*\*Priority:\*\*\s*(.+)$/im)?.[1]?.trim() ?? "";
   const answer = answerPart
     .split(/\r?\n/)
     .filter((line) => !/^\*\*Label:\*\*/i.test(line.trim()))
+    .filter((line) => !/^\*\*Priority:\*\*/i.test(line.trim()))
     .join("\n")
     .trim();
   const keywordTrack = keywordTrackMatch
@@ -398,6 +401,7 @@ function splitOpgQuestionBody(body) {
 
   return {
     behavioralLabel: cleanInline(behavioralLabel),
+    priority: cleanInline(priority),
     answer,
     keywordTrack,
     storyBreakdown: storyBreakdownBody
@@ -409,6 +413,13 @@ function splitOpgQuestionBody(body) {
       : undefined,
     deliveryNotes: deliveryNotes.trim()
   };
+}
+
+function normalizeOpgPriority(priority) {
+  if (/important|high|⭐/i.test(priority)) return "high";
+  if (/medium/i.test(priority)) return "medium";
+  if (/low/i.test(priority)) return "low";
+  return cleanInline(priority);
 }
 
 function makeArchivedOpgSeed(sourceId, title = sourceId) {
@@ -454,13 +465,14 @@ function parseOpgQuestionBank(markdown) {
   function pushCurrent() {
     if (!current) return;
     const body = trimBlankLines(current.body).join("\n").trim();
-    const { behavioralLabel, answer, keywordTrack, storyBreakdown, deliveryNotes } = splitOpgQuestionBody(body);
+    const { behavioralLabel, priority, answer, keywordTrack, storyBreakdown, deliveryNotes } = splitOpgQuestionBody(body);
     if (answer || keywordTrack.length || storyBreakdown || deliveryNotes) {
       getSection(current.sectionTitle).items.push({
         type: "question",
         number: current.number,
         label: current.label,
         behavioralLabel,
+        priority: normalizeOpgPriority(priority),
         title: current.title,
         answer,
         keywordTrack,
@@ -782,6 +794,165 @@ function parseHrScreeningBank(markdown) {
   ];
 }
 
+function splitQaBehavioralBody(body) {
+  const [answerPart, keywordPart = ""] = body.split(/\n\*\*Keyword track:\*\*[^\n]*\n/i);
+  return {
+    answer: stripHorizontalRules(answerPart),
+    keywordTrack: parseBullets(keywordPart),
+    sourceMarkdown: stripHorizontalRules(body)
+  };
+}
+
+function parseQaBehavioralBank(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const sections = [];
+  const introLines = [];
+  let sectionTitle = "Overview";
+  let current = null;
+  let resource = null;
+  let beforeFirstSection = true;
+
+  function getSection(title) {
+    let section = sections.find((item) => item.title === title);
+    if (!section) {
+      section = { title, items: [] };
+      sections.push(section);
+    }
+    return section;
+  }
+
+  function pushCurrent() {
+    if (!current) return;
+    const body = trimBlankLines(current.body).join("\n").trim();
+    const { answer, keywordTrack, sourceMarkdown } = splitQaBehavioralBody(body);
+    if (answer || keywordTrack.length) {
+      getSection(current.sectionTitle).items.push({
+        type: "question",
+        number: current.number,
+        label: current.label,
+        title: current.title,
+        answer,
+        keywordTrack,
+        sourceMarkdown
+      });
+    }
+    current = null;
+  }
+
+  function pushResource() {
+    if (!resource) return;
+    const body = stripHorizontalRules(trimBlankLines(resource.body).join("\n"));
+    if (body) {
+      getSection(resource.sectionTitle).items.push({
+        type: "resource",
+        title: resource.title,
+        body,
+        keywordTrack: parseBullets(body),
+        sourceMarkdown: body
+      });
+    }
+    resource = null;
+  }
+
+  for (const line of lines) {
+    const questionMatch = line.match(/^##\s+#(\d+)\.\s+(.+)$/);
+    if (questionMatch) {
+      beforeFirstSection = false;
+      pushCurrent();
+      pushResource();
+      const number = Number(questionMatch[1]);
+      current = {
+        number,
+        label: `#${number}`,
+        title: stripMarkdown(questionMatch[2]),
+        sectionTitle,
+        body: []
+      };
+      continue;
+    }
+
+    const sectionMatch = line.match(/^#\s+(.+)$/);
+    if (sectionMatch) {
+      const nextTitle = stripMarkdown(sectionMatch[1]);
+      pushCurrent();
+      pushResource();
+      if (/^20 Standard QA Behavioral Questions/i.test(nextTitle)) {
+        beforeFirstSection = true;
+        continue;
+      }
+      beforeFirstSection = false;
+      sectionTitle = nextTitle;
+      if (/^Final Tips$/i.test(sectionTitle)) {
+        resource = {
+          title: "Final Tips",
+          sectionTitle,
+          body: []
+        };
+      }
+      continue;
+    }
+
+    if (current) {
+      current.body.push(line);
+    } else if (resource) {
+      resource.body.push(line);
+    } else if (beforeFirstSection) {
+      introLines.push(line);
+    }
+  }
+
+  pushCurrent();
+  pushResource();
+
+  const intro = trimBlankLines(introLines).join("\n").trim();
+  if (intro) {
+    sections.unshift({
+      title: "Overview",
+      items: [
+        {
+          type: "resource",
+          title: "20 Standard QA Behavioral Questions Overview",
+          body: intro,
+          sourceMarkdown: intro
+        }
+      ]
+    });
+  }
+
+  if (!sections.length) return [];
+
+  return [
+    {
+      user_id: userId,
+      source_id: "QA-20-BQS",
+      title: "20 Standard QA Behavioral Questions",
+      prompt: "Practice the 20 QA behavioral answers on one categorized page.",
+      answer: markdown.trim(),
+      category: "QA Behavioral Prep",
+      track: "QA Behavioral",
+      difficulty: "medium",
+      tags: ["qa", "behavioral", "question-bank"],
+      source_file: "sources/PREP_QA_20_BQs.md",
+      story_links: [],
+      status: "new",
+      notes: "Imported as a single categorized QA behavioral prep page. Keyword tracks are used as recall cues while answers are collapsed.",
+      structured_content: {
+        kind: "opg",
+        metadata: {
+          sourceId: "QA-20-BQS",
+          aggregate: "true",
+          binderTitle: "QA Behavioral Binder"
+        },
+        opgSections: sections,
+        sourceMarkdown: markdown.trim()
+      },
+      question_group: "behavioral",
+      behavioral_type: "star",
+      technical_type: null
+    }
+  ];
+}
+
 function titleFromStoryMarkdown(markdown, fallbackId) {
   const heading = markdown.match(/^#\s+(S\d{3})\s+—\s+(.+)$/m);
   if (heading) {
@@ -839,10 +1010,12 @@ function parseStoryFiles() {
 const markdown = fs.readFileSync(bankPath, "utf8");
 const opgMarkdown = fs.existsSync(opgBankPath) ? fs.readFileSync(opgBankPath, "utf8") : "";
 const hrScreeningMarkdown = fs.existsSync(hrScreeningPath) ? fs.readFileSync(hrScreeningPath, "utf8") : "";
+const qaBehavioralMarkdown = fs.existsSync(qaBehavioralPath) ? fs.readFileSync(qaBehavioralPath, "utf8") : "";
 const questions = [
   ...parseConceptualBank(markdown),
   ...parseOpgQuestionBank(opgMarkdown),
   ...parseHrScreeningBank(hrScreeningMarkdown),
+  ...parseQaBehavioralBank(qaBehavioralMarkdown),
   ...parseStoryFiles()
 ];
 
@@ -860,4 +1033,4 @@ if (error) {
   process.exit(1);
 }
 
-console.log(`Imported ${questions.length} record(s): conceptual questions, OPG prep bank, HR screening bank, and story files.`);
+console.log(`Imported ${questions.length} record(s): conceptual questions, OPG prep bank, HR screening bank, QA behavioral bank, and story files.`);

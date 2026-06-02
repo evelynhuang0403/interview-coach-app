@@ -95,6 +95,7 @@ export type OpgQuestionBankItem = {
   number?: number;
   label?: string;
   behavioralLabel?: string;
+  priority?: string;
   title: string;
   answer?: string;
   keywordTrack?: string[];
